@@ -16,53 +16,54 @@ struct ResponseUnitTests {
     func runSuccessResponse() {
         let response = RunSuccessResponse(
             success: true,
-            message: "App launched",
+            appPath: "/path/to/app",
             bundleId: "com.example.app",
-            targetUdid: "12345",
-            targetName: "iPhone 15",
-            targetType: "simulator"
+            targetUdid: "12345"
         )
         
         #expect(response.success == true)
-        #expect(response.message == "App launched")
+        #expect(response.appPath == "/path/to/app")
         #expect(response.bundleId == "com.example.app")
         #expect(response.targetUdid == "12345")
-        #expect(response.targetName == "iPhone 15")
-        #expect(response.targetType == "simulator")
     }
     
     @Test("LogStartResponse has proper session info")
     func logStartResponse() {
-        let sessionInfo = LogSessionInfo(
-            sessionId: "session-123",
-            bundleId: "com.test",
-            targetUdid: "UDID",
-            targetName: "Test Device",
-            targetType: "device",
-            logPath: "/path/to/log"
-        )
-        
         let response = LogStartResponse(
             success: true,
-            message: "Started",
-            sessionInfo: sessionInfo
+            sessionName: "session-123",
+            pid: 12345
         )
         
         #expect(response.success == true)
-        #expect(response.sessionInfo.sessionId == "session-123")
-        #expect(response.sessionInfo.bundleId == "com.test")
+        #expect(response.sessionName == "session-123")
+        #expect(response.pid == 12345)
     }
     
     @Test("LogListResponse handles empty sessions")
     func emptyLogListResponse() {
         let response = LogListResponse(
             success: true,
-            message: "No sessions",
-            sessions: []
+            activeSessions: []
         )
         
         #expect(response.success == true)
-        #expect(response.sessions.isEmpty)
+        #expect(response.activeSessions.isEmpty)
+    }
+    
+    @Test("LogSessionInfo contains session details")
+    func logSessionInfo() {
+        let sessionInfo = LogSessionInfo(
+            name: "test-session",
+            pid: 9876,
+            bundleId: "com.example.app",
+            targetUdid: "DEVICE-123"
+        )
+        
+        #expect(sessionInfo.name == "test-session")
+        #expect(sessionInfo.pid == 9876)
+        #expect(sessionInfo.bundleId == "com.example.app")
+        #expect(sessionInfo.targetUdid == "DEVICE-123")
     }
     
     @Test("CleanResponse for cleanup operations")
