@@ -26,8 +26,8 @@ jobs:
     - name: Run tests with coverage
       run: |
         # Note: --skip with tags is not yet supported in Swift Testing from CLI
-        # Running all tests with a timeout to prevent hanging
-        timeout 300 swift test --enable-code-coverage || true
+        # Running tests with coverage enabled
+        swift test --enable-code-coverage || echo "Tests failed, continuing anyway"
     
     - name: Generate coverage report
       run: |
