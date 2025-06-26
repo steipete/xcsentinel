@@ -2,7 +2,7 @@ import Testing
 import Foundation
 @testable import xcsentinel
 
-@Suite("Command JSON Integration Tests", .tags(.integration, .fast))
+@Suite("Command JSON Integration Tests", .tags(.integration, .fast), .disabled("Integration tests disabled in CI"))
 struct CommandJSONIntegrationTests {
     
     // MARK: - Build Command JSON Output

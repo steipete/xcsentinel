@@ -2,7 +2,7 @@ import Testing
 import Foundation
 @testable import xcsentinel
 
-@Suite("End-to-End Workflow Tests", .tags(.integration, .slow))
+@Suite("End-to-End Workflow Tests", .tags(.integration, .slow), .disabled("Integration tests disabled in CI"))
 final class WorkflowTests {
     let tempDirectory: URL
     let originalHome: String

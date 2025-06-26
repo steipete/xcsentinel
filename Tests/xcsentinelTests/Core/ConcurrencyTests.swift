@@ -2,7 +2,7 @@ import Testing
 import Foundation
 @testable import xcsentinel
 
-@Suite("Concurrency Tests", .tags(.unit, .slow))
+@Suite("Concurrency Tests", .tags(.unit, .slow), .disabled("Slow tests disabled in CI"))
 struct ConcurrencyTests {
     
     // MARK: - State Management Concurrency

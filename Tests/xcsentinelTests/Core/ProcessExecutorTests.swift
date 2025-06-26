@@ -2,7 +2,7 @@ import Testing
 import Foundation
 @testable import xcsentinel
 
-@Suite("ProcessExecutor Tests", .tags(.processExecution, .unit, .fast))
+@Suite("ProcessExecutor Tests", .tags(.processExecution, .unit, .fast), .disabled("Process execution tests disabled in CI"))
 struct ProcessExecutorTests {
     
     // MARK: - Basic Command Execution

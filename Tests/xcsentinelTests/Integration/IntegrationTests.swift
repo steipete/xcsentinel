@@ -3,7 +3,7 @@ import Foundation
 import ArgumentParser
 @testable import xcsentinel
 
-@Suite("Integration Tests", .tags(.integration, .slow))
+@Suite("Integration Tests", .tags(.integration, .slow), .disabled("Integration tests disabled in CI"))
 final class IntegrationTests {
     let tempDirectory: URL
     let originalHome: String

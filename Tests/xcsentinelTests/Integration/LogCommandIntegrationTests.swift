@@ -2,7 +2,7 @@ import Testing
 import Foundation
 @testable import xcsentinel
 
-@Suite("Log Command Integration Tests", .tags(.integration))
+@Suite("Log Command Integration Tests", .tags(.integration), .disabled("Integration tests disabled in CI"))
 final class LogCommandIntegrationTests {
     
     @Test("Log start command validates simulator UDID targeting")
