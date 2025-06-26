@@ -61,3 +61,17 @@ fastlane/Preview.html
 fastlane/screenshots/**/*.png
 fastlane/test_output
 .DS_Store
+
+# xcsentinel specific
+.xcsentinel.rc
+Makefile
+/.xcsentinel/
+
+# IDE
+.vscode/
+.idea/
+
+# Swift PM
+.swiftpm/config/registries.json
+.swiftpm/xcode/package.xcworkspace/contents.xcworkspacedata
+.netrc

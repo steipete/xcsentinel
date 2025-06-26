@@ -1,8 +1,4 @@
-You're right, those are excellent questions that move from high-level design to implementation-level robustness. A truly "final" SDD should address these details.
-
-Here is a new, complete, and definitive Software Design Document for `xcsentinel` that provides concrete answers to all the questions raised, leaving no room for ambiguity.
-
-***
+https://aistudio.google.com/prompts/10z8B5GOaUi4xbpp8xWDYmf5CehfAOpMM
 
 ## Software Design Document: `xcsentinel`
 

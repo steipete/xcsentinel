@@ -1,0 +1,65 @@
+# Makefile for xcsentinel installation
+# Note: This is named Makefile.install to avoid conflicts with xcodemake
+
+.PHONY: all build install uninstall clean test release
+
+PREFIX ?= /usr/local
+BINARY_NAME = xcsentinel
+INSTALL_PATH = $(PREFIX)/bin/$(BINARY_NAME)
+
+all: build
+
+build:
+	swift build --configuration debug
+
+release:
+	swift build --configuration release --arch arm64 --arch x86_64
+
+install: release
+	@echo "Installing $(BINARY_NAME) to $(INSTALL_PATH)"
+	@sudo mkdir -p $(PREFIX)/bin
+	@sudo cp -f .build/apple/Products/Release/$(BINARY_NAME) $(INSTALL_PATH)
+	@echo "Installation complete!"
+	@echo ""
+	@echo "To enable shell completions:"
+	@echo "  Bash: $(BINARY_NAME) completion bash >> ~/.bash_profile"
+	@echo "  Zsh:  $(BINARY_NAME) completion zsh > ~/.zsh/completions/_$(BINARY_NAME)"
+	@echo "  Fish: $(BINARY_NAME) completion fish > ~/.config/fish/completions/$(BINARY_NAME).fish"
+
+uninstall:
+	@echo "Removing $(BINARY_NAME) from $(INSTALL_PATH)"
+	@sudo rm -f $(INSTALL_PATH)
+	@echo "Uninstall complete!"
+
+clean:
+	swift package clean
+	rm -rf .build
+
+test:
+	swift test
+
+# Development helpers
+run: build
+	./.build/debug/$(BINARY_NAME) $(ARGS)
+
+format:
+	swift format --in-place --recursive Sources/ Tests/
+
+lint:
+	swift format lint --recursive Sources/ Tests/
+
+# Help
+help:
+	@echo "xcsentinel Makefile"
+	@echo ""
+	@echo "Usage:"
+	@echo "  make build          Build debug version"
+	@echo "  make release        Build release version (universal binary)"
+	@echo "  make install        Build and install to $(PREFIX)/bin"
+	@echo "  make uninstall      Remove installed binary"
+	@echo "  make clean          Clean build artifacts"
+	@echo "  make test           Run tests"
+	@echo "  make run ARGS=...   Run debug build with arguments"
+	@echo "  make format         Format code"
+	@echo "  make lint           Check code formatting"
+	@echo "  make help           Show this help"
