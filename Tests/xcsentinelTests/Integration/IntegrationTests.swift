@@ -68,23 +68,30 @@ final class IntegrationTests {
     
     @Test("Version command outputs correctly")
     func versionCommand() throws {
-        let output = captureOutput {
-            _ = try? XCSentinel.parseAsRoot(["--version"])
-        }
+        // Version is available through Version.current
+        let version = Version.current
+        #expect(version == "1.0.0")
         
-        #expect(output.contains("1.0.0"))
+        // Full version includes git hash
+        let fullVersion = Version.fullVersion
+        #expect(fullVersion.contains("1.0.0"))
     }
     
     @Test("Help command provides usage information")
     func helpCommand() throws {
-        let output = captureOutput {
-            _ = try? XCSentinel.parseAsRoot(["--help"])
-        }
+        // Help text is available through command configuration
+        let config = XCSentinel.configuration
+        let helpText = config.abstract
         
-        #expect(output.contains("xcsentinel"))
-        #expect(output.contains("build"))
-        #expect(output.contains("run"))
-        #expect(output.contains("log"))
+        #expect(!helpText.isEmpty)
+        #expect(config.commandName == "xcsentinel")
+        
+        // Check subcommands exist
+        let subcommands = config.subcommands
+        let subcommandNames = subcommands.map { $0.configuration.commandName }
+        #expect(subcommandNames.contains("build"))
+        #expect(subcommandNames.contains("run"))
+        #expect(subcommandNames.contains("log"))
     }
     
     @Test("Completion generation works for all shells")

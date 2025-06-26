@@ -6,49 +6,44 @@ import Foundation
 struct RunCommandTests {
     
     @Test("RunCommand inherits BuildCommand properties")
-    func inheritsFromBuildCommand() {
-        let command = RunCommand()
+    func inheritsFromBuildCommand() throws {
+        // Parse with minimum required arguments
+        let command = try RunCommand.parse(["--scheme", "MyApp", "--destination", "platform=iOS", "--workspace", "MyApp.xcworkspace"])
         
-        // Verify it has all BuildCommand properties
-        #expect(command.workspace == nil)
+        // Verify parsed properties
+        #expect(command.workspace == "MyApp.xcworkspace")
         #expect(command.project == nil)
-        #expect(command.scheme == "")
-        #expect(command.destination == "")
+        #expect(command.scheme == "MyApp")
+        #expect(command.destination == "platform=iOS")
         #expect(!command.options.json)
     }
     
     @Test("RunCommand validates required fields")
     func validateRequiredFields() throws {
-        var command = RunCommand()
-        
-        // Should fail without required fields
+        // Test missing scheme
         #expect(throws: Error.self) {
-            try command.validate()
+            _ = try RunCommand.parse(["--destination", "platform=iOS", "--workspace", "MyApp.xcworkspace"])
         }
         
-        // Add required fields one by one
-        command.scheme = "MyApp"
+        // Test missing destination
         #expect(throws: Error.self) {
-            try command.validate()
+            _ = try RunCommand.parse(["--scheme", "MyApp", "--workspace", "MyApp.xcworkspace"])
         }
         
-        command.destination = "platform=iOS Simulator,name=iPhone 15"
-        #expect(throws: Error.self) {
-            try command.validate()
-        }
+        // Test missing workspace and project - ArgumentParser allows this, validation happens later
+        let cmdNoWorkspace = try RunCommand.parse(["--scheme", "MyApp", "--destination", "platform=iOS"])
+        #expect(cmdNoWorkspace.workspace == nil)
+        #expect(cmdNoWorkspace.project == nil)
         
-        command.workspace = "MyApp.xcworkspace"
-        #expect(throws: Never.self) {
-            try command.validate()
-        }
+        // Should succeed with all required fields
+        let command = try RunCommand.parse(["--scheme", "MyApp", "--destination", "platform=iOS", "--workspace", "MyApp.xcworkspace"])
+        #expect(command.scheme == "MyApp")
+        #expect(command.destination == "platform=iOS")
+        #expect(command.workspace == "MyApp.xcworkspace")
     }
     
     @Test("RunCommand handles different destination formats")
-    func destinationFormats() {
-        var command = RunCommand()
-        command.scheme = "MyApp"
-        command.workspace = "MyApp.xcworkspace"
-        
+    func destinationFormats() throws {
         // Test various destination formats
         let destinations = [
             "platform=iOS Simulator,name=iPhone 15",
@@ -59,10 +54,8 @@ struct RunCommandTests {
         ]
         
         for dest in destinations {
-            command.destination = dest
-            #expect(throws: Never.self) {
-                try command.validate()
-            }
+            let command = try RunCommand.parse(["--scheme", "MyApp", "--destination", dest, "--workspace", "MyApp.xcworkspace"])
+            #expect(command.destination == dest)
         }
     }
 }

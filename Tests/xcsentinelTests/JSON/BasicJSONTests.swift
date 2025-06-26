@@ -103,7 +103,7 @@ struct BasicJSONTests {
         #expect(json.contains("\"log_sessions\""))
         #expect(json.contains("\"target_udid\":\"UDID\""))
         #expect(json.contains("\"bundle_id\":\"com.test\""))
-        #expect(json.contains("\"log_path\":\"/test.log\""))
+        #expect(json.contains("\"log_path\":\"/test.log\"") || json.contains("\"log_path\":\"\\/test.log\"")) // JSON may or may not escape forward slashes
         #expect(json.contains("\"start_time\":\"2023-11"))
     }
     

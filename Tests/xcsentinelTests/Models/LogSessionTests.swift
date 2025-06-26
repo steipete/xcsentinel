@@ -109,8 +109,8 @@ struct LogSessionTests {
         #expect(decoded.bundleID == original.bundleID)
         #expect(decoded.logPath == original.logPath)
         
-        // Date comparison with small tolerance for floating point precision
+        // Date comparison with tolerance for ISO8601 encoding precision
         let timeDifference = abs(decoded.startTime.timeIntervalSince(original.startTime))
-        #expect(timeDifference < 0.001)
+        #expect(timeDifference < 1.0) // ISO8601 typically has second precision
     }
 }

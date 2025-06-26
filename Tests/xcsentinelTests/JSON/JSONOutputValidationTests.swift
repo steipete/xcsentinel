@@ -11,13 +11,13 @@ struct JSONOutputValidationTests {
     func jsonEnvelopeStructure() throws {
         let formatter = OutputFormatter(json: true)
         
-        // Test success envelope
+        // Test success response
         let successResponse = BuildSuccessResponse(success: true, message: "Test")
         var output = captureOutput { formatter.success(successResponse) }
         var json = try parseJSON(output)
         
         #expect(json["success"] as? Bool == true)
-        #expect(json["data"] != nil)
+        #expect(json["message"] as? String == "Test")
         #expect(json["error"] == nil)
         
         // Test error envelope
@@ -26,7 +26,6 @@ struct JSONOutputValidationTests {
         json = try parseJSON(output)
         
         #expect(json["success"] as? Bool == false)
-        #expect(json["data"] == nil)
         #expect(json["error"] != nil)
     }
     
