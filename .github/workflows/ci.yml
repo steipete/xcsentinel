@@ -31,11 +31,18 @@ jobs:
     
     - name: Generate coverage report
       run: |
+        # Debug: List what's in .build
+        echo "=== Searching for coverage files ==="
+        find .build -name "*.profdata" -o -name "*.profraw" || echo "No coverage files found"
+        
         # Find the profdata file
-        PROFDATA=$(find .build -name "*.profdata" -o -name "*.profraw" | head -1)
+        PROFDATA=$(find .build \( -name "*.profdata" -o -name "*.profraw" \) | head -1)
         if [ -n "$PROFDATA" ]; then
+          echo "Found coverage file: $PROFDATA"
+          
           # If it's a profraw file, merge it first
           if [[ "$PROFDATA" == *.profraw ]]; then
+            mkdir -p .build/debug/codecov
             xcrun llvm-profdata merge -sparse "$PROFDATA" -o .build/debug/codecov/default.profdata
             PROFDATA=".build/debug/codecov/default.profdata"
           fi
