@@ -117,7 +117,7 @@ struct OutputFormatterTests {
     @Test("JSON formatter produces pretty-printed output")
     func jsonPrettyPrinting() throws {
         let formatter = OutputFormatter(json: true)
-        let response = CleanResponse(message: "Cleaned")
+        let response = CleanResponse(success: true, message: "Cleaned")
         
         let output = try captureOutput {
             formatter.success(response)

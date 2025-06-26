@@ -1,9 +1,9 @@
 import Foundation
 
-class BuildEngine {
+actor BuildEngine {
     private let fileManager = FileManager.default
     
-    struct BuildConfiguration {
+    struct BuildConfiguration: Sendable {
         let scheme: String
         let destination: String
         let workspace: String?
@@ -11,7 +11,7 @@ class BuildEngine {
         let noIncremental: Bool
     }
     
-    func build(configuration: BuildConfiguration) throws -> ProcessResult {
+    func build(configuration: BuildConfiguration) async throws -> ProcessResult {
         // Validate workspace or project
         guard configuration.workspace != nil || configuration.project != nil else {
             throw XCSentinelError.missingWorkspaceOrProject
@@ -21,10 +21,11 @@ class BuildEngine {
         let projectURL = URL(fileURLWithPath: projectPath)
         
         // Check if we should use incremental build
-        if !configuration.noIncremental && shouldUseIncrementalBuild(projectURL: projectURL) {
+        let shouldUseIncremental = await shouldUseIncrementalBuild(projectURL: projectURL)
+        if !configuration.noIncremental && shouldUseIncremental {
             // Try incremental build
             if let makefileURL = findMakefile(near: projectURL) {
-                let result = try runMake(at: makefileURL.deletingLastPathComponent())
+                let result = try await runMake(at: makefileURL.deletingLastPathComponent())
                 
                 if result.exitCode == 0 {
                     // Update marker file on successful make
@@ -38,9 +39,9 @@ class BuildEngine {
             }
             
             // Check if xcodemake is available
-            if let xcodemakePath = ProcessExecutor.findExecutable("xcodemake") {
+            if let xcodemakePath = await ProcessExecutor.findExecutable("xcodemake") {
                 // Run xcodemake to generate Makefile
-                let xcodemakeResult = try ProcessExecutor.execute(
+                let xcodemakeResult = try await ProcessExecutor.execute(
                     xcodemakePath,
                     arguments: buildXcodemakeArguments(configuration: configuration),
                     currentDirectory: projectURL.deletingLastPathComponent()
@@ -48,7 +49,7 @@ class BuildEngine {
                 
                 if xcodemakeResult.exitCode == 0 {
                     // Run make
-                    let makeResult = try runMake(at: projectURL.deletingLastPathComponent())
+                    let makeResult = try await runMake(at: projectURL.deletingLastPathComponent())
                     if makeResult.exitCode == 0 {
                         try updateMarkerFile(projectURL: projectURL)
                     }
@@ -58,10 +59,10 @@ class BuildEngine {
         }
         
         // Fall back to xcodebuild
-        return try runXcodebuild(configuration: configuration)
+        return try await runXcodebuild(configuration: configuration)
     }
     
-    private func shouldUseIncrementalBuild(projectURL: URL) -> Bool {
+    private func shouldUseIncrementalBuild(projectURL: URL) async -> Bool {
         let markerURL = markerFileURL(for: projectURL)
         
         guard fileManager.fileExists(atPath: markerURL.path) else {
@@ -102,94 +103,98 @@ class BuildEngine {
         return mostRecentDate
     }
     
+    private func findMakefile(near projectURL: URL) -> URL? {
+        let directory = projectURL.deletingLastPathComponent()
+        let makefileURL = directory.appendingPathComponent("Makefile")
+        
+        if fileManager.fileExists(atPath: makefileURL.path) {
+            return makefileURL
+        }
+        
+        return nil
+    }
+    
+    private func runMake(at directory: URL) async throws -> ProcessResult {
+        return try await ProcessExecutor.execute(
+            "/usr/bin/make",
+            currentDirectory: directory
+        )
+    }
+    
+    private func runXcodebuild(configuration: BuildConfiguration) async throws -> ProcessResult {
+        var arguments = ["build"]
+        
+        arguments.append(contentsOf: ["-scheme", configuration.scheme])
+        arguments.append(contentsOf: ["-destination", configuration.destination])
+        
+        if let workspace = configuration.workspace {
+            arguments.append(contentsOf: ["-workspace", workspace])
+        } else if let project = configuration.project {
+            arguments.append(contentsOf: ["-project", project])
+        }
+        
+        return try await ProcessExecutor.execute(
+            "/usr/bin/xcodebuild",
+            arguments: arguments
+        )
+    }
+    
+    private func buildXcodemakeArguments(configuration: BuildConfiguration) -> [String] {
+        var arguments: [String] = []
+        
+        arguments.append(contentsOf: ["-scheme", configuration.scheme])
+        arguments.append(contentsOf: ["-destination", configuration.destination])
+        
+        if let workspace = configuration.workspace {
+            arguments.append(contentsOf: ["-workspace", workspace])
+        } else if let project = configuration.project {
+            arguments.append(contentsOf: ["-project", project])
+        }
+        
+        return arguments
+    }
+    
     private func markerFileURL(for projectURL: URL) -> URL {
-        return projectURL.deletingLastPathComponent().appendingPathComponent(".xcsentinel.rc")
+        let directory = projectURL.deletingLastPathComponent()
+        return directory.appendingPathComponent(".xcsentinel.rc")
     }
     
     private func updateMarkerFile(projectURL: URL) throws {
         let markerURL = markerFileURL(for: projectURL)
         
         if fileManager.fileExists(atPath: markerURL.path) {
-            // Touch existing file
+            // Update timestamp
             try fileManager.setAttributes([.modificationDate: Date()], ofItemAtPath: markerURL.path)
         } else {
-            // Create new marker file
-            fileManager.createFile(atPath: markerURL.path, contents: nil)
+            // Create marker file
+            try Data().write(to: markerURL)
         }
     }
     
     private func deleteMarkerFile(projectURL: URL) throws {
         let markerURL = markerFileURL(for: projectURL)
+        
         if fileManager.fileExists(atPath: markerURL.path) {
             try fileManager.removeItem(at: markerURL)
         }
     }
     
-    private func findMakefile(near projectURL: URL) -> URL? {
-        let directory = projectURL.deletingLastPathComponent()
-        let makefileURL = directory.appendingPathComponent("Makefile")
+    func getBuildSettings(configuration: BuildConfiguration) async throws -> [String: String] {
+        var arguments = ["-showBuildSettings"]
         
-        return fileManager.fileExists(atPath: makefileURL.path) ? makefileURL : nil
-    }
-    
-    private func runMake(at directory: URL) throws -> ProcessResult {
-        return try ProcessExecutor.execute(
-            "/usr/bin/make",
-            currentDirectory: directory
+        arguments.append(contentsOf: ["-scheme", configuration.scheme])
+        arguments.append(contentsOf: ["-destination", configuration.destination])
+        
+        if let workspace = configuration.workspace {
+            arguments.append(contentsOf: ["-workspace", workspace])
+        } else if let project = configuration.project {
+            arguments.append(contentsOf: ["-project", project])
+        }
+        
+        let result = try await ProcessExecutor.execute(
+            "/usr/bin/xcodebuild",
+            arguments: arguments
         )
-    }
-    
-    private func buildXcodemakeArguments(configuration: BuildConfiguration) -> [String] {
-        var args: [String] = []
-        
-        if let workspace = configuration.workspace {
-            args.append(contentsOf: ["-workspace", workspace])
-        } else if let project = configuration.project {
-            args.append(contentsOf: ["-project", project])
-        }
-        
-        args.append(contentsOf: [
-            "-scheme", configuration.scheme,
-            "-destination", configuration.destination
-        ])
-        
-        return args
-    }
-    
-    private func runXcodebuild(configuration: BuildConfiguration) throws -> ProcessResult {
-        var args: [String] = []
-        
-        if let workspace = configuration.workspace {
-            args.append(contentsOf: ["-workspace", workspace])
-        } else if let project = configuration.project {
-            args.append(contentsOf: ["-project", project])
-        }
-        
-        args.append(contentsOf: [
-            "-scheme", configuration.scheme,
-            "-destination", configuration.destination,
-            "build"
-        ])
-        
-        return try ProcessExecutor.execute("/usr/bin/xcodebuild", arguments: args)
-    }
-    
-    func getBuildSettings(configuration: BuildConfiguration) throws -> [String: String] {
-        var args: [String] = []
-        
-        if let workspace = configuration.workspace {
-            args.append(contentsOf: ["-workspace", workspace])
-        } else if let project = configuration.project {
-            args.append(contentsOf: ["-project", project])
-        }
-        
-        args.append(contentsOf: [
-            "-scheme", configuration.scheme,
-            "-destination", configuration.destination,
-            "-showBuildSettings"
-        ])
-        
-        let result = try ProcessExecutor.execute("/usr/bin/xcodebuild", arguments: args)
         
         if result.exitCode != 0 {
             throw XCSentinelError.buildFailed(message: "Failed to get build settings: \(result.error)")
@@ -197,11 +202,12 @@ class BuildEngine {
         
         // Parse build settings
         var settings: [String: String] = [:]
+        let lines = result.output.split(separator: "\n")
         
-        for line in result.output.components(separatedBy: .newlines) {
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            if trimmed.contains(" = ") {
-                let parts = trimmed.split(separator: "=", maxSplits: 1)
+        for line in lines {
+            let trimmedLine = line.trimmingCharacters(in: .whitespaces)
+            if trimmedLine.contains(" = ") {
+                let parts = trimmedLine.split(separator: "=", maxSplits: 1)
                 if parts.count == 2 {
                     let key = parts[0].trimmingCharacters(in: .whitespaces)
                     let value = parts[1].trimmingCharacters(in: .whitespaces)

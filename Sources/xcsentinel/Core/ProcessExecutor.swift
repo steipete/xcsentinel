@@ -1,18 +1,18 @@
 import Foundation
 
-struct ProcessResult {
+struct ProcessResult: Sendable {
     let output: String
     let error: String
     let exitCode: Int32
 }
 
-class ProcessExecutor {
+enum ProcessExecutor {
     static func execute(
         _ executablePath: String,
         arguments: [String] = [],
         environment: [String: String]? = nil,
         currentDirectory: URL? = nil
-    ) throws -> ProcessResult {
+    ) async throws -> ProcessResult {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executablePath)
         process.arguments = arguments
@@ -31,23 +31,28 @@ class ProcessExecutor {
         process.standardOutput = outputPipe
         process.standardError = errorPipe
         
-        do {
-            try process.run()
-            process.waitUntilExit()
-            
-            let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
-            let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
-            
-            let output = String(data: outputData, encoding: .utf8) ?? ""
-            let error = String(data: errorData, encoding: .utf8) ?? ""
-            
-            return ProcessResult(
-                output: output.trimmingCharacters(in: .whitespacesAndNewlines),
-                error: error.trimmingCharacters(in: .whitespacesAndNewlines),
-                exitCode: process.terminationStatus
-            )
-        } catch {
-            throw XCSentinelError.processExecutionFailed(error.localizedDescription)
+        return try await withCheckedThrowingContinuation { continuation in
+            do {
+                try process.run()
+                
+                Task {
+                    process.waitUntilExit()
+                    
+                    let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
+                    let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
+                    
+                    let output = String(data: outputData, encoding: .utf8) ?? ""
+                    let error = String(data: errorData, encoding: .utf8) ?? ""
+                    
+                    continuation.resume(returning: ProcessResult(
+                        output: output.trimmingCharacters(in: .whitespacesAndNewlines),
+                        error: error.trimmingCharacters(in: .whitespacesAndNewlines),
+                        exitCode: process.terminationStatus
+                    ))
+                }
+            } catch {
+                continuation.resume(throwing: XCSentinelError.processExecutionFailed(error.localizedDescription))
+            }
         }
     }
     
@@ -57,7 +62,7 @@ class ProcessExecutor {
         environment: [String: String]? = nil,
         currentDirectory: URL? = nil,
         outputPath: String? = nil
-    ) throws -> Process {
+    ) async throws -> Process {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executablePath)
         process.arguments = arguments
@@ -90,8 +95,8 @@ class ProcessExecutor {
         return process
     }
     
-    static func findExecutable(_ name: String) -> String? {
-        let result = try? execute("/usr/bin/which", arguments: [name])
+    static func findExecutable(_ name: String) async -> String? {
+        let result = try? await execute("/usr/bin/which", arguments: [name])
         return result?.exitCode == 0 ? result?.output : nil
     }
 }

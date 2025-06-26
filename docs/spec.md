@@ -93,7 +93,7 @@ This section documents the final resolutions for key design questions, providing
 
 6.  **Underlying Log Command:**
     *   **Decision:** The `xcsentinel log start` command will use the most efficient and precise system tool available:
-        *   **For Simulators:** It will use `xcrun simctl log stream --predicate 'subsystem == "<bundle_id>"'`. This uses the system's native predicate-based filtering, which is highly performant and accurate, avoiding the overhead of `grep`.
+        *   **For Simulators:** It will use `xcrun simctl spawn <udid> log stream --predicate 'subsystem == "<bundle_id>"'`. This ensures the log stream is explicitly targeted to the specified simulator UDID, preventing race conditions and ambiguity when multiple simulators are running. The `spawn` command creates a new process within the simulator's environment, guaranteeing correct device targeting.
         *   **For Devices:** It will use `xcrun devicectl device console --device <udid> <bundle_id>`.
 
 7.  **Stale PID Check Mechanism:**

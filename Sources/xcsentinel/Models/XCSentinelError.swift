@@ -1,7 +1,8 @@
 import Foundation
 
-enum XCSentinelError: Error, LocalizedError, Equatable {
+enum XCSentinelError: Error, LocalizedError, Equatable, Sendable {
     case simulatorNotFound(name: String)
+    case deviceNotFound(name: String)
     case ambiguousSimulator(name: String, matches: [String])
     case buildFailed(message: String)
     case invalidDestination(String)
@@ -15,6 +16,8 @@ enum XCSentinelError: Error, LocalizedError, Equatable {
         switch self {
         case .simulatorNotFound(let name):
             return "Simulator with name '\(name)' not found."
+        case .deviceNotFound(let name):
+            return "Device with name '\(name)' not found."
         case .ambiguousSimulator(let name, let matches):
             return "Ambiguous simulator name '\(name)'. Matches: \(matches.joined(separator: ", "))"
         case .buildFailed(let message):
@@ -37,6 +40,7 @@ enum XCSentinelError: Error, LocalizedError, Equatable {
     var errorCode: String {
         switch self {
         case .simulatorNotFound: return "SIMULATOR_NOT_FOUND"
+        case .deviceNotFound: return "DEVICE_NOT_FOUND"
         case .ambiguousSimulator: return "AMBIGUOUS_SIMULATOR"
         case .buildFailed: return "BUILD_FAILED"
         case .invalidDestination: return "INVALID_DESTINATION"

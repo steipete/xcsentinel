@@ -1,4 +1,4 @@
-// swift-tools-version: 5.9
+// swift-tools-version: 6.0
 // The swift-tools-version declares the minimum version of Swift required to build this package.
 
 import PackageDescription
@@ -24,12 +24,18 @@ let package = Package(
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ],
             swiftSettings: [
-                .unsafeFlags(["-parse-as-library"])
+                .unsafeFlags(["-parse-as-library"]),
+                .enableUpcomingFeature("StrictConcurrency"),
+                .swiftLanguageMode(.v6)
             ]
         ),
         .testTarget(
             name: "xcsentinelTests",
-            dependencies: ["xcsentinel"]
+            dependencies: ["xcsentinel"],
+            swiftSettings: [
+                .enableUpcomingFeature("StrictConcurrency"),
+                .swiftLanguageMode(.v6)
+            ]
         ),
     ]
 )

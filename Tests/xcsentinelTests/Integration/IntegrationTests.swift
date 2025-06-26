@@ -41,7 +41,7 @@ final class IntegrationTests {
         let runArgs = ["run", "--scheme", "MyApp", "--destination", "id=ABC123", "--workspace", "MyApp.xcworkspace", "--json"]
         let runCommand = try XCSentinel.parseAsRoot(runArgs) as? RunCommand
         #expect(runCommand != nil)
-        #expect(runCommand?.json == true)
+        #expect(runCommand?.options.json == true)
         
         // Test log start command parsing
         let logArgs = ["log", "start", "--udid", "TEST-UDID", "--bundle-id", "com.test.app"]
@@ -90,25 +90,25 @@ final class IntegrationTests {
     @Test("Completion generation works for all shells")
     func completionGeneration() throws {
         // Bash completion
-        let bashCompletion = try XCSentinel.completionScript(for: .bash)
+        let bashCompletion = XCSentinel.completionScript(for: .bash)
         #expect(bashCompletion.contains("_xcsentinel"))
         #expect(bashCompletion.contains("COMPREPLY"))
         
         // Zsh completion
-        let zshCompletion = try XCSentinel.completionScript(for: .zsh)
+        let zshCompletion = XCSentinel.completionScript(for: .zsh)
         #expect(zshCompletion.contains("#compdef xcsentinel"))
         
         // Fish completion
-        let fishCompletion = try XCSentinel.completionScript(for: .fish)
+        let fishCompletion = XCSentinel.completionScript(for: .fish)
         #expect(fishCompletion.contains("complete -c xcsentinel"))
     }
     
-    @Test("State persistence across command invocations", .serialized)
-    func statePersistence() throws {
+    @Test("State persistence across command invocations")
+    func statePersistence() async throws {
         let stateController = StateController.shared
         
         // First invocation: create some state
-        try stateController.updateState { state in
+        try await stateController.updateState { state in
             state.globalSessionCounter = 42
             state.logSessions["test"] = LogSession(
                 pid: 12345,
@@ -122,7 +122,7 @@ final class IntegrationTests {
         
         // Simulate new invocation by creating new controller
         // (In reality, each CLI invocation gets a fresh StateController.shared)
-        let loadedState = try stateController.loadState()
+        let loadedState = try await stateController.loadState()
         
         #expect(loadedState.globalSessionCounter == 42)
         #expect(loadedState.logSessions["test"] != nil)
@@ -138,8 +138,8 @@ final class IntegrationTests {
         
         // Verify it's valid JSON
         let data = Data(output.utf8)
-        let json = try JSONSerialization.jsonObject(with: data)
-        #expect(json != nil)
+        _ = try JSONSerialization.jsonObject(with: data)
+        // If we get here without throwing, the JSON is valid
     }
     
     // Helper to capture stdout
@@ -175,7 +175,7 @@ final class EndToEndTests {
     }
     
     @Test("Build workflow with Makefile", .timeLimit(.minutes(1)))
-    func buildWorkflow() throws {
+    func buildWorkflow() async throws {
         // Create a mock project
         let projectURL = try TestHelpers.createMockXcodeProject(at: tempDirectory)
         
@@ -207,7 +207,7 @@ final class EndToEndTests {
             noIncremental: false
         )
         
-        let result = try engine.build(configuration: config)
+        let result = try await engine.build(configuration: config)
         
         #expect(result.exitCode == 0)
         #expect(result.output.contains("Build complete"))
@@ -238,7 +238,7 @@ final class EndToEndTests {
             encoding: .utf8
         )
         
-        try stateController.updateState { state in
+        try await stateController.updateState { state in
             state.globalSessionCounter = 1
             state.logSessions["session-1"] = LogSession(
                 pid: Int32(ProcessInfo.processInfo.processIdentifier),
@@ -251,17 +251,17 @@ final class EndToEndTests {
         }
         
         // List sessions
-        let sessions = try manager.listSessions()
+        let sessions = try await manager.listSessions()
         #expect(sessions.count == 1)
         #expect(sessions.first?.name == "session-1")
         
         // Stop session
-        let output = try manager.stopLogSession(sessionName: "session-1", fullOutput: true)
+        let output = try await manager.stopLogSession(sessionName: "session-1", fullOutput: true)
         #expect(output.contains("Test log content"))
         #expect(output.contains("Line 3"))
         
         // Verify session was removed
-        let finalSessions = try manager.listSessions()
+        let finalSessions = try await manager.listSessions()
         #expect(finalSessions.isEmpty)
     }
 }

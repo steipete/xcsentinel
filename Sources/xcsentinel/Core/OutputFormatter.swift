@@ -1,18 +1,18 @@
 import Foundation
 
-enum OutputFormat {
+enum OutputFormat: Sendable {
     case plain
     case json
 }
 
-struct OutputFormatter {
+struct OutputFormatter: Sendable {
     let format: OutputFormat
     
     init(json: Bool) {
         self.format = json ? .json : .plain
     }
     
-    func success<T: Encodable>(_ data: T) {
+    func success<T: Encodable & Sendable>(_ data: T) {
         switch format {
         case .plain:
             if let string = data as? String {
@@ -25,7 +25,7 @@ struct OutputFormatter {
                 let encoder = JSONEncoder()
                 encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
                 encoder.dateEncodingStrategy = .iso8601
-                let jsonData = try encoder.encode(SuccessResponse(success: true, data: data))
+                let jsonData = try encoder.encode(data)
                 if let jsonString = String(data: jsonData, encoding: .utf8) {
                     print(jsonString)
                 }
@@ -60,17 +60,12 @@ struct OutputFormatter {
     }
 }
 
-struct SuccessResponse<T: Encodable>: Encodable {
-    let success: Bool
-    let data: T
-}
-
-struct ErrorResponse: Encodable {
+struct ErrorResponse: Encodable, Sendable {
     let success: Bool
     let error: ErrorInfo
 }
 
-struct ErrorInfo: Encodable {
+struct ErrorInfo: Encodable, Sendable {
     let code: String
     let message: String
 }

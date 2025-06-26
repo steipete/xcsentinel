@@ -20,19 +20,26 @@ brew install cameroncooke/tap/axe
 
 `xcsentinel` is the primary tool for high-level tasks. It intelligently manages builds and logging sessions.
 
+#### Available Commands
+- `build` - Build Xcode projects with intelligent caching
+- `run` - Build, install, and launch applications  
+- `log` - Manage background log streaming sessions
+- `completion` - Generate shell completion scripts
+
 #### Building an Application (`xcsentinel build`)
 
 This command intelligently uses `make` for fast, incremental builds if a `Makefile` exists, or generates one with `xcodemake`. It falls back to `xcodebuild` if needed.
 
 - **Synopsis:**
   ```bash
-  xcsentinel build --scheme <name> --destination <specifier> [--workspace <path> | --project <path>] [--no-incremental]
+  xcsentinel build --scheme <name> --destination <specifier> [--workspace <path> | --project <path>] [--no-incremental] [--json]
   ```
 
 - **Key Arguments:**
   *   `--scheme <name>`: **(Required)** The scheme to build.
   *   `--destination <specifier>`: **(Required)** The `xcodebuild` destination string (e.g., `'platform=macOS'`).
   *   `--no-incremental`: (Flag) Force a standard `xcodebuild`, bypassing the acceleration logic.
+  *   `--json`: (Flag) Output results in JSON format for programmatic use.
 
 - **Example (iOS Simulator):**
   ```bash
@@ -45,7 +52,7 @@ This command orchestrates the entire sequence of building, installing, and launc
 
 - **Synopsis:**
   ```bash
-  xcsentinel run --scheme <name> --destination <specifier> [--workspace <path> | --project <path>]
+  xcsentinel run --scheme <name> --destination <specifier> [--workspace <path> | --project <path>] [--json]
   ```
 - **Behavior:**
     1.  Builds the application using the intelligent build engine.
@@ -65,29 +72,50 @@ This command orchestrates the entire sequence of building, installing, and launc
 `xcsentinel` manages background logging processes using named sessions, so you don't have to track PIDs.
 
 - **Start a Log Session:**
-  *   **Command:** `xcsentinel log start --udid <udid> --bundle-id <id>`
+  *   **Command:** `xcsentinel log start --udid <udid> --bundle-id <id> [--json]`
   *   **Description:** Starts a log stream in the background for a given app and device/simulator.
   *   **Example:** `xcsentinel log start --udid "ABC-123" --bundle-id "com.example.MyApp"`
   *   **Output:** `INFO: Started log session 'session-1' for com.example.MyApp. PID: 50123.`
+  *   **JSON Output:** Returns `{"success": true, "session_name": "session-1", "pid": 50123}`
 
 - **Stop and View Logs:**
-  *   **Command:** `xcsentinel log stop <session-name> [--full]`
+  *   **Command:** `xcsentinel log stop <session-name> [--full] [--json]`
   *   **Description:** Stops the session, prints its logs, and cleans up. Prints the last 100 lines by default.
   *   **Example:** `xcsentinel log stop session-1 --full`
+  *   **JSON Output:** Returns `{"success": true, "log_content": "..."}`
 
 - **View Live Logs:**
   *   **Command:** `xcsentinel log tail <session-name>`
   *   **Description:** Streams live logs from an active session without stopping it. Press `Ctrl-C` to exit.
   *   **Example:** `xcsentinel log tail session-1`
+  *   **Note:** JSON output is not supported for the tail command.
 
 - **List Active Sessions:**
-  *   **Command:** `xcsentinel log list`
+  *   **Command:** `xcsentinel log list [--json]`
   *   **Description:** Shows all running log sessions and automatically cleans up any that are stale.
   *   **Example:** `xcsentinel log list`
+  *   **JSON Output:** Returns `{"success": true, "active_sessions": [{"session_name": "...", "pid": ..., "bundle_id": "...", "target_udid": "..."}]}`
 
 - **Clean Stale Sessions:**
-  *   **Command:** `xcsentinel log clean`
+  *   **Command:** `xcsentinel log clean [--json]`
   *   **Description:** Manually purges all stale (non-running) sessions from the state file.
+  *   **JSON Output:** Returns `{"success": true}`
+
+#### Shell Completion (`xcsentinel completion`)
+
+Generate shell completion scripts for enhanced command-line experience.
+
+- **Generate Bash Completion:**
+  *   **Command:** `xcsentinel completion bash`
+  *   **Usage:** `xcsentinel completion bash > ~/.xcsentinel-completion.bash && echo "source ~/.xcsentinel-completion.bash" >> ~/.bashrc`
+
+- **Generate Zsh Completion:**
+  *   **Command:** `xcsentinel completion zsh`
+  *   **Usage:** `xcsentinel completion zsh > ~/.xcsentinel-completion.zsh && echo "source ~/.xcsentinel-completion.zsh" >> ~/.zshrc`
+
+- **Generate Fish Completion:**
+  *   **Command:** `xcsentinel completion fish`
+  *   **Usage:** `xcsentinel completion fish > ~/.config/fish/completions/xcsentinel.fish`
 
 ### 3. UI Automation with `axe`
 
@@ -142,7 +170,15 @@ For basic inspection and direct control, use the standard system tools.
   xcrun simctl io <simulator_udid> screenshot screenshot.png
   ```
 
-### 5. Common Workflow Examples
+### 5. JSON Output Format
+
+When using the `--json` flag with xcsentinel commands, all output follows a consistent format:
+- All field names use snake_case (e.g., `session_name`, `bundle_id`, `target_udid`)
+- Success responses include `"success": true` and relevant data fields
+- Error responses include `"success": false`, `"error_code"`, and `"error_message"`
+- This format is designed for easy parsing by AI agents and automation scripts
+
+### 6. Common Workflow Examples
 
 #### A. Full iOS Simulator Workflow: Build, Run, and Log
 1.  **Find your scheme and simulator:**
@@ -181,5 +217,5 @@ For basic inspection and direct control, use the standard system tools.
     xcrun simctl io <simulator_udid> screenshot after_tap.png
     ```
 
-### 6. Limitations
+### 7. Limitations
 This toolchain provides comprehensive functionality for building, running, testing, and interacting with applications. The only feature from the original `xcodebuildmcp` that is not included is **project scaffolding**. Creating new projects must be done manually in Xcode or via other templating tools.

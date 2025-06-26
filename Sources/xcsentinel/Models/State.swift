@@ -1,6 +1,6 @@
 import Foundation
 
-struct State: Codable {
+struct State: Codable, Sendable {
     var globalSessionCounter: Int
     var logSessions: [String: LogSession]
     

@@ -9,12 +9,29 @@ enum Version {
     }
     
     private static func getGitHash() -> String? {
-        // Try to get git hash at runtime
-        let result = try? ProcessExecutor.execute(
-            "/usr/bin/git",
-            arguments: ["rev-parse", "--short", "HEAD"]
-        )
+        // Use Process directly in a synchronous way
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+        process.arguments = ["rev-parse", "--short", "HEAD"]
         
-        return result?.exitCode == 0 ? result?.output : nil
+        let outputPipe = Pipe()
+        process.standardOutput = outputPipe
+        process.standardError = Pipe()
+        
+        do {
+            try process.run()
+            process.waitUntilExit()
+            
+            if process.terminationStatus == 0 {
+                let data = outputPipe.fileHandleForReading.readDataToEndOfFile()
+                let output = String(data: data, encoding: .utf8)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                return output
+            }
+        } catch {
+            // Ignore errors, return nil
+        }
+        
+        return nil
     }
 }

@@ -1,6 +1,6 @@
 import Foundation
 
-class StateController {
+actor StateController {
     static let shared = StateController()
     
     private let stateDirectoryURL: URL
@@ -13,7 +13,7 @@ class StateController {
         self.stateFileURL = stateDirectoryURL.appendingPathComponent("state.json")
     }
     
-    func ensureStateDirectory() throws {
+    private func ensureStateDirectory() throws {
         if !fileManager.fileExists(atPath: stateDirectoryURL.path) {
             try fileManager.createDirectory(at: stateDirectoryURL, withIntermediateDirectories: true)
         }
@@ -32,7 +32,7 @@ class StateController {
         return try decoder.decode(State.self, from: data)
     }
     
-    func saveState(_ state: State) throws {
+    private func saveState(_ state: State) throws {
         try ensureStateDirectory()
         
         let encoder = JSONEncoder()
@@ -48,39 +48,45 @@ class StateController {
         _ = try fileManager.replaceItem(at: stateFileURL, withItemAt: tempURL, backupItemName: nil, options: [], resultingItemURL: nil)
     }
     
-    func updateState(_ block: (inout State) throws -> Void) throws {
+    func updateState<T>(_ block: (inout State) throws -> T) async throws -> T {
         var state = try loadState()
-        try block(&state)
+        let result = try block(&state)
         try saveState(state)
+        return result
     }
     
-    func cleanStaleSessions() throws {
-        try updateState { state in
-            var staleSessions: [String] = []
-            
-            for (name, session) in state.logSessions {
-                // Check if process is still alive using kill -0
-                let result = Process()
-                result.executableURL = URL(fileURLWithPath: "/bin/kill")
-                result.arguments = ["-0", "\(session.pid)"]
+    func cleanStaleSessions() async throws {
+        // First, get the current state and check which sessions are stale
+        var staleSessions: [String] = []
+        let currentState = try loadState()
+        
+        for (name, session) in currentState.logSessions {
+            // Check if process is still alive using kill -0
+            let isAlive = await withCheckedContinuation { continuation in
+                let process = Process()
+                process.executableURL = URL(fileURLWithPath: "/bin/kill")
+                process.arguments = ["-0", "\(session.pid)"]
                 
                 do {
-                    try result.run()
-                    result.waitUntilExit()
-                    
-                    if result.terminationStatus != 0 {
-                        // Process is not running
-                        staleSessions.append(name)
-                    }
+                    try process.run()
+                    process.waitUntilExit()
+                    continuation.resume(returning: process.terminationStatus == 0)
                 } catch {
-                    // If kill command fails, consider session stale
-                    staleSessions.append(name)
+                    continuation.resume(returning: false)
                 }
             }
             
-            // Remove stale sessions
-            for name in staleSessions {
-                state.logSessions.removeValue(forKey: name)
+            if !isAlive {
+                staleSessions.append(name)
+            }
+        }
+        
+        // Now update the state to remove stale sessions
+        if !staleSessions.isEmpty {
+            try await updateState { state in
+                for name in staleSessions {
+                    state.logSessions.removeValue(forKey: name)
+                }
             }
         }
     }

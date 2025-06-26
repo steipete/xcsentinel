@@ -1,10 +1,38 @@
 import ArgumentParser
 import Foundation
 
-struct RunCommand: ParsableCommand {
+struct RunCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "run",
-        abstract: "Build, install, and launch an application"
+        abstract: "Build, install, and launch an application",
+        discussion: """
+            Performs a complete workflow: builds your app, installs it on the target
+            device or simulator, and launches it.
+            
+            This command combines the build process with deployment, automatically
+            resolving destination names to UDIDs and handling both simulators and
+            physical devices.
+            
+            Examples:
+              Run on simulator:
+                xcsentinel run --scheme MyApp --workspace MyApp.xcworkspace \\
+                  --destination "platform=iOS Simulator,name=iPhone 15 Pro"
+              
+              Run on device by UDID:
+                xcsentinel run --scheme MyApp --project MyApp.xcodeproj \\
+                  --destination "id=00008120-001234567890ABCD"
+              
+              Run with JSON output:
+                xcsentinel run --scheme MyApp --workspace MyApp.xcworkspace \\
+                  --destination "platform=iOS Simulator,name=iPhone 15" --json
+            
+            The command will:
+            1. Build the specified scheme
+            2. Extract app path and bundle ID from build settings
+            3. Resolve the destination to a specific device UDID
+            4. Install the app on the target device
+            5. Launch the app
+            """
     )
     
     @Option(name: .long, help: "The scheme to build and run")
@@ -19,11 +47,10 @@ struct RunCommand: ParsableCommand {
     @Option(name: .long, help: "Path to the project")
     var project: String?
     
-    @Flag(name: .long, help: "Output in JSON format")
-    var json = false
+    @OptionGroup var options: GlobalOptions
     
-    func run() throws {
-        let formatter = OutputFormatter(json: json)
+    func run() async throws {
+        let formatter = OutputFormatter(json: options.json)
         
         do {
             // Build the project
@@ -36,14 +63,14 @@ struct RunCommand: ParsableCommand {
                 noIncremental: false
             )
             
-            let buildResult = try buildEngine.build(configuration: configuration)
+            let buildResult = try await buildEngine.build(configuration: configuration)
             
             if buildResult.exitCode != 0 {
                 throw XCSentinelError.buildFailed(message: buildResult.error.isEmpty ? buildResult.output : buildResult.error)
             }
             
             // Get build settings
-            let settings = try buildEngine.getBuildSettings(configuration: configuration)
+            let settings = try await buildEngine.getBuildSettings(configuration: configuration)
             
             guard let productsDir = settings["BUILT_PRODUCTS_DIR"],
                   let productName = settings["FULL_PRODUCT_NAME"],
@@ -55,15 +82,15 @@ struct RunCommand: ParsableCommand {
             
             // Resolve destination to UDID
             let deviceManager = DeviceManager()
-            let udid = try deviceManager.resolveDestination(destination)
+            let udid = try await deviceManager.resolveDestination(destination)
             
             // Install the app
-            try deviceManager.installApp(udid: udid, appPath: appPath)
+            try await deviceManager.installApp(udid: udid, appPath: appPath)
             
             // Launch the app
-            try deviceManager.launchApp(udid: udid, bundleID: bundleID)
+            try await deviceManager.launchApp(udid: udid, bundleID: bundleID)
             
-            if json {
+            if options.json {
                 let response = RunSuccessResponse(
                     success: true,
                     appPath: appPath,

@@ -1,11 +1,11 @@
 import Foundation
 
-struct BuildSuccessResponse: Encodable {
+struct BuildSuccessResponse: Encodable, Sendable {
     let success: Bool
     let message: String
 }
 
-struct RunSuccessResponse: Encodable {
+struct RunSuccessResponse: Encodable, Sendable {
     let success: Bool
     let appPath: String
     let bundleId: String
@@ -19,23 +19,29 @@ struct RunSuccessResponse: Encodable {
     }
 }
 
-struct LogStartResponse: Encodable {
+struct LogStartResponse: Encodable, Sendable {
+    let success: Bool
     let sessionName: String
+    let pid: Int32
     
     enum CodingKeys: String, CodingKey {
+        case success
         case sessionName = "session_name"
+        case pid
     }
 }
 
-struct LogStopResponse: Encodable {
+struct LogStopResponse: Encodable, Sendable {
+    let success: Bool
     let logContent: String
     
     enum CodingKeys: String, CodingKey {
+        case success
         case logContent = "log_content"
     }
 }
 
-struct LogSessionInfo: Encodable {
+struct LogSessionInfo: Encodable, Sendable {
     let name: String
     let pid: Int32
     let bundleId: String
@@ -49,14 +55,17 @@ struct LogSessionInfo: Encodable {
     }
 }
 
-struct LogListResponse: Encodable {
+struct LogListResponse: Encodable, Sendable {
+    let success: Bool
     let activeSessions: [LogSessionInfo]
     
     enum CodingKeys: String, CodingKey {
+        case success
         case activeSessions = "active_sessions"
     }
 }
 
-struct CleanResponse: Encodable {
+struct CleanResponse: Encodable, Sendable {
+    let success: Bool
     let message: String
 }

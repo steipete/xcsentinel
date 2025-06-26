@@ -1,15 +1,15 @@
 import Foundation
 
-struct Device {
+struct Device: Sendable {
     let udid: String
     let name: String
     let osVersion: String?
     let isSimulator: Bool
 }
 
-class DeviceManager {
+actor DeviceManager {
     
-    func resolveDestination(_ destination: String) throws -> String {
+    func resolveDestination(_ destination: String) async throws -> String {
         // Parse destination string
         let components = parseDestination(destination)
         
@@ -26,9 +26,9 @@ class DeviceManager {
         let isSimulator = platform.lowercased().contains("simulator")
         
         if isSimulator {
-            return try resolveSimulator(name: name, os: components["OS"])
+            return try await resolveSimulator(name: name, os: components["OS"])
         } else {
-            return try resolveDevice(name: name)
+            return try await resolveDevice(name: name)
         }
     }
     
@@ -52,8 +52,8 @@ class DeviceManager {
         return components
     }
     
-    private func resolveSimulator(name: String, os: String?) throws -> String {
-        let result = try ProcessExecutor.execute(
+    private func resolveSimulator(name: String, os: String?) async throws -> String {
+        let result = try await ProcessExecutor.execute(
             "/usr/bin/xcrun",
             arguments: ["simctl", "list", "devices", "-j"]
         )
@@ -99,8 +99,8 @@ class DeviceManager {
         return matches[0].udid
     }
     
-    private func resolveDevice(name: String) throws -> String {
-        let result = try ProcessExecutor.execute(
+    private func resolveDevice(name: String) async throws -> String {
+        let result = try await ProcessExecutor.execute(
             "/usr/bin/xcrun",
             arguments: ["devicectl", "list", "devices", "-j"]
         )
@@ -111,85 +111,66 @@ class DeviceManager {
         
         guard let data = result.output.data(using: .utf8),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let result = json["result"] as? [String: Any],
-              let devices = result["devices"] as? [[String: Any]] else {
+              let deviceList = json["devices"] as? [[String: Any]] else {
             throw XCSentinelError.processExecutionFailed("Failed to parse device list")
         }
         
-        var matches: [(udid: String, name: String)] = []
-        
-        for device in devices {
+        for device in deviceList {
             guard let deviceName = device["name"] as? String,
-                  let udid = device["identifier"] as? String else { continue }
+                  let udid = device["udid"] as? String else { continue }
             
             if deviceName == name {
-                matches.append((udid: udid, name: deviceName))
+                return udid
             }
         }
         
-        if matches.isEmpty {
-            throw XCSentinelError.simulatorNotFound(name: name) // Reuse error type
-        }
-        
-        if matches.count > 1 {
-            let names = matches.map { $0.name }
-            throw XCSentinelError.ambiguousSimulator(name: name, matches: names)
-        }
-        
-        return matches[0].udid
+        throw XCSentinelError.deviceNotFound(name: name)
     }
     
-    func installApp(udid: String, appPath: String) throws {
-        // Check if simulator or device
-        let isSimulator = try isSimulatorUDID(udid)
+    func installApp(udid: String, appPath: String) async throws {
+        let isSimulator = try await isSimulatorUDID(udid)
         
+        let result: ProcessResult
         if isSimulator {
-            let result = try ProcessExecutor.execute(
+            result = try await ProcessExecutor.execute(
                 "/usr/bin/xcrun",
                 arguments: ["simctl", "install", udid, appPath]
             )
-            
-            if result.exitCode != 0 {
-                throw XCSentinelError.processExecutionFailed("Failed to install app: \(result.error)")
-            }
         } else {
-            let result = try ProcessExecutor.execute(
+            result = try await ProcessExecutor.execute(
                 "/usr/bin/xcrun",
                 arguments: ["devicectl", "device", "install", "app", "--device", udid, appPath]
             )
-            
-            if result.exitCode != 0 {
-                throw XCSentinelError.processExecutionFailed("Failed to install app: \(result.error)")
-            }
+        }
+        
+        if result.exitCode != 0 {
+            throw XCSentinelError.processExecutionFailed("Failed to install app: \(result.error)")
         }
     }
     
-    func launchApp(udid: String, bundleID: String) throws {
-        let isSimulator = try isSimulatorUDID(udid)
+    func launchApp(udid: String, bundleID: String) async throws {
+        let isSimulator = try await isSimulatorUDID(udid)
         
+        let result: ProcessResult
         if isSimulator {
-            let result = try ProcessExecutor.execute(
+            result = try await ProcessExecutor.execute(
                 "/usr/bin/xcrun",
                 arguments: ["simctl", "launch", udid, bundleID]
             )
-            
-            if result.exitCode != 0 {
-                throw XCSentinelError.processExecutionFailed("Failed to launch app: \(result.error)")
-            }
         } else {
-            let result = try ProcessExecutor.execute(
+            result = try await ProcessExecutor.execute(
                 "/usr/bin/xcrun",
                 arguments: ["devicectl", "device", "process", "launch", "--device", udid, bundleID]
             )
-            
-            if result.exitCode != 0 {
-                throw XCSentinelError.processExecutionFailed("Failed to launch app: \(result.error)")
-            }
+        }
+        
+        if result.exitCode != 0 {
+            throw XCSentinelError.processExecutionFailed("Failed to launch app: \(result.error)")
         }
     }
     
-    private func isSimulatorUDID(_ udid: String) throws -> Bool {
-        let result = try ProcessExecutor.execute(
+    private func isSimulatorUDID(_ udid: String) async throws -> Bool {
+        let result = try await ProcessExecutor.execute(
             "/usr/bin/xcrun",
             arguments: ["simctl", "list", "devices", "-j"]
         )

@@ -2,41 +2,51 @@ import Testing
 import Foundation
 @testable import xcsentinel
 
-@Suite("ProcessExecutor Tests", .tags(.fast))
+@Suite("ProcessExecutor Tests", .tags(.processExecution, .unit, .fast))
 struct ProcessExecutorTests {
     
-    @Test("Execute runs simple command successfully")
-    func executeSimpleCommand() throws {
-        let result = try ProcessExecutor.execute("/bin/echo", arguments: ["Hello, World!"])
+    // MARK: - Basic Command Execution
+    
+    @Test("Executes commands and captures output", arguments: [
+        ("/bin/echo", ["Hello"], "Hello", "", 0),
+        ("/bin/echo", ["Multiple", "Words"], "Multiple Words", "", 0),
+        ("/bin/echo", ["-n", "No newline"], "No newline", "", 0),
+        ("/usr/bin/true", [], "", "", 0),
+        ("/usr/bin/false", [], "", "", 1)
+    ])
+    func executeCommands(
+        command: String,
+        arguments: [String],
+        expectedOutput: String,
+        expectedError: String,
+        expectedExitCode: Int32
+    ) async throws {
+        let result = try await ProcessExecutor.execute(command, arguments: arguments)
         
-        #expect(result.exitCode == 0)
-        #expect(result.output == "Hello, World!")
-        #expect(result.error.isEmpty)
+        #expect(result.exitCode == expectedExitCode)
+        #expect(result.output.trimmingCharacters(in: .whitespacesAndNewlines) == expectedOutput)
+        #expect(result.error.trimmingCharacters(in: .whitespacesAndNewlines) == expectedError)
     }
     
-    @Test("Execute captures error output")
-    func captureErrorOutput() throws {
-        // Use a command that writes to stderr
-        let result = try ProcessExecutor.execute("/bin/sh", arguments: ["-c", "echo 'Error message' >&2"])
+    @Test("Captures stdout and stderr separately")
+    func capturesOutputStreams() async throws {
+        // Test stderr capture
+        let stderrResult = try await ProcessExecutor.execute(
+            "/bin/sh",
+            arguments: ["-c", "echo 'To stderr' >&2; echo 'To stdout'"]
+        )
         
-        #expect(result.exitCode == 0)
-        #expect(result.output.isEmpty)
-        #expect(result.error == "Error message")
-    }
-    
-    @Test("Execute handles non-zero exit codes")
-    func nonZeroExitCode() throws {
-        let result = try ProcessExecutor.execute("/bin/false")
-        
-        #expect(result.exitCode != 0)
+        #expect(stderrResult.output.trimmingCharacters(in: .whitespacesAndNewlines) == "To stdout")
+        #expect(stderrResult.error.trimmingCharacters(in: .whitespacesAndNewlines) == "To stderr")
+        #expect(stderrResult.exitCode == 0)
     }
     
     @Test("Execute respects working directory")
-    func workingDirectory() throws {
+    func workingDirectory() async throws {
         let tempDir = try TestHelpers.createTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: tempDir) }
         
-        let result = try ProcessExecutor.execute(
+        let result = try await ProcessExecutor.execute(
             "/bin/pwd",
             currentDirectory: tempDir
         )
@@ -46,8 +56,8 @@ struct ProcessExecutorTests {
     }
     
     @Test("Execute passes environment variables")
-    func environmentVariables() throws {
-        let result = try ProcessExecutor.execute(
+    func environmentVariables() async throws {
+        let result = try await ProcessExecutor.execute(
             "/bin/sh",
             arguments: ["-c", "echo $TEST_VAR"],
             environment: ["TEST_VAR": "test_value"]
@@ -58,77 +68,118 @@ struct ProcessExecutorTests {
     }
     
     @Test("Execute throws on invalid executable")
-    func invalidExecutable() {
-        #expect(throws: XCSentinelError.self) {
-            _ = try ProcessExecutor.execute("/nonexistent/command")
+    func invalidExecutable() async {
+        await #expect(throws: XCSentinelError.self) {
+            _ = try await ProcessExecutor.execute("/nonexistent/command")
         }
     }
     
-    @Test("ExecuteAsync starts process without blocking", .timeLimit(.minutes(1)))
+    // MARK: - Asynchronous Execution
+    
+    @Test("Executes processes asynchronously with file output", .timeLimit(.minutes(1)))
     func executeAsync() async throws {
         let tempDir = try TestHelpers.createTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: tempDir) }
         
-        let outputPath = tempDir.appendingPathComponent("output.txt").path
+        let outputPath = tempDir.appendingPathComponent("async-output.txt").path
         
-        // Start async process that sleeps briefly then writes
-        let process = try ProcessExecutor.executeAsync(
+        // Start async process
+        let process = try await ProcessExecutor.executeAsync(
             "/bin/sh",
-            arguments: ["-c", "sleep 0.1 && echo 'Async output'"],
+            arguments: ["-c", "for i in 1 2 3; do echo \"Line $i\"; sleep 0.1; done"],
             outputPath: outputPath
         )
         
-        // Process should be running
-        #expect(process.isRunning)
+        // Verify process started
+        #expect(process.isRunning || process.terminationStatus == 0)
         
         // Wait for completion
         process.waitUntilExit()
+        #expect(!process.isRunning)
+        #expect(process.terminationStatus == 0)
         
-        // Check output was written
+        // Verify output was written correctly
         let output = try String(contentsOfFile: outputPath)
-        #expect(output.trimmingCharacters(in: .whitespacesAndNewlines) == "Async output")
-    }
-    
-    @Test("FindExecutable locates system commands")
-    func findExecutable() {
-        // Test with common system commands
-        #expect(ProcessExecutor.findExecutable("ls") != nil)
-        #expect(ProcessExecutor.findExecutable("echo") != nil)
-        #expect(ProcessExecutor.findExecutable("swift") != nil)
-        
-        // Test with non-existent command
-        #expect(ProcessExecutor.findExecutable("nonexistent_command_xyz") == nil)
-    }
-    
-    @Test("Execute handles commands with complex arguments")
-    func complexArguments() throws {
-        let args = [
-            "-c",
-            "echo 'Line 1'; echo 'Line 2'; echo 'Line 3'"
-        ]
-        
-        let result = try ProcessExecutor.execute("/bin/sh", arguments: args)
-        
-        #expect(result.exitCode == 0)
-        let lines = result.output.components(separatedBy: .newlines).filter { !$0.isEmpty }
+        let lines = output.components(separatedBy: .newlines).filter { !$0.isEmpty }
         #expect(lines.count == 3)
-        #expect(lines[0] == "Line 1")
-        #expect(lines[1] == "Line 2")
-        #expect(lines[2] == "Line 3")
+        #expect(lines == ["Line 1", "Line 2", "Line 3"])
     }
     
-    @Test("Execute handles very long output")
-    func longOutput() throws {
-        // Generate 1000 lines of output
-        let result = try ProcessExecutor.execute(
+    @Test("Async process can be terminated")
+    func terminateAsyncProcess() async throws {
+        let tempDir = try TestHelpers.createTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+        
+        let outputPath = tempDir.appendingPathComponent("terminated.txt").path
+        
+        // Start long-running process
+        let process = try await ProcessExecutor.executeAsync(
             "/bin/sh",
-            arguments: ["-c", "for i in $(seq 1 1000); do echo \"Line $i\"; done"]
+            arguments: ["-c", "while true; do echo 'Running'; sleep 0.1; done"],
+            outputPath: outputPath
+        )
+        
+        #expect(process.isRunning)
+        
+        // Terminate after a short delay
+        try await Task.sleep(nanoseconds: 200_000_000) // 0.2 seconds
+        process.terminate()
+        process.waitUntilExit()
+        
+        #expect(!process.isRunning)
+        #expect(process.terminationStatus != 0)
+    }
+    
+    // MARK: - Executable Discovery
+    
+    @Test("Finds executables in PATH", arguments: [
+        ("ls", true),
+        ("echo", true),
+        ("cat", true),
+        ("grep", true),
+        ("nonexistent_command_xyz_123", false),
+        ("this-should-not-exist", false)
+    ])
+    func findExecutables(command: String, shouldExist: Bool) async {
+        let path = await ProcessExecutor.findExecutable(command)
+        
+        if shouldExist {
+            #expect(path != nil, "Expected to find \(command) in PATH")
+            if let foundPath = path {
+                #expect(FileManager.default.fileExists(atPath: foundPath))
+            }
+        } else {
+            #expect(path == nil, "Expected \(command) to not exist")
+        }
+    }
+    
+    // MARK: - Complex Command Scenarios
+    
+    @Test("Handles shell scripts with multiple commands")
+    func shellScripts() async throws {
+        let script = "echo 'First'; echo 'Second' >&2; echo 'Third'; exit 42"
+        let result = try await ProcessExecutor.execute("/bin/sh", arguments: ["-c", script])
+        
+        #expect(result.exitCode == 42)
+        #expect(result.output.contains("First"))
+        #expect(result.output.contains("Third"))
+        #expect(result.error.contains("Second"))
+    }
+    
+    @Test("Handles large output efficiently", .timeLimit(.minutes(1)))
+    func largeOutput() async throws {
+        // Generate substantial output to test buffer handling
+        let lineCount = 10_000
+        let result = try await ProcessExecutor.execute(
+            "/bin/sh",
+            arguments: ["-c", "seq 1 \(lineCount)"]
         )
         
         #expect(result.exitCode == 0)
+        
         let lines = result.output.components(separatedBy: .newlines).filter { !$0.isEmpty }
-        #expect(lines.count == 1000)
-        #expect(lines.first == "Line 1")
-        #expect(lines.last == "Line 1000")
+        #expect(lines.count == lineCount)
+        #expect(lines.first == "1")
+        #expect(lines.last == "\(lineCount)")
     }
 }

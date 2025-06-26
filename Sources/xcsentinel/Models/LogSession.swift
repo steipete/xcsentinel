@@ -1,6 +1,6 @@
 import Foundation
 
-struct LogSession: Codable {
+struct LogSession: Codable, Sendable {
     let pid: Int32
     let name: String
     let targetUDID: String

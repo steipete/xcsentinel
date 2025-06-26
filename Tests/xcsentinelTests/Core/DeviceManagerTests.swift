@@ -19,67 +19,67 @@ struct DeviceManagerTests {
         let manager = DeviceManager()
         
         // Use reflection to test private method (in real code, make it internal for testing)
-        let mirror = Mirror(reflecting: manager)
+        let _ = Mirror(reflecting: manager)
         
         // For now, we'll test the public API behavior
         // In production, we'd make parseDestination internal for testability
     }
     
     @Test("Resolve destination with direct UDID")
-    func resolveDirectUDID() throws {
+    func resolveDirectUDID() async throws {
         let manager = DeviceManager()
-        let udid = try manager.resolveDestination("id=DIRECT-UDID-12345")
+        let udid = try await manager.resolveDestination("id=DIRECT-UDID-12345")
         #expect(udid == "DIRECT-UDID-12345")
     }
     
     @Test("Resolve destination throws on invalid format")
-    func invalidDestination() {
+    func invalidDestination() async {
         let manager = DeviceManager()
         
-        #expect(throws: XCSentinelError.invalidDestination("no-equals-sign")) {
-            _ = try manager.resolveDestination("no-equals-sign")
+        await #expect(throws: XCSentinelError.invalidDestination("no-equals-sign")) {
+            _ = try await manager.resolveDestination("no-equals-sign")
         }
     }
     
     @Test("Simulator resolution with mock data")
-    func simulatorResolution() throws {
+    func simulatorResolution() async throws {
         // This test would need ProcessExecutor to be mockable
         // For now, it demonstrates the expected behavior
         
         let manager = DeviceManager()
         
         // This will fail in tests since we can't mock ProcessExecutor yet
-        #expect(throws: Error.self) {
-            _ = try manager.resolveDestination("platform=iOS Simulator,name=iPhone 15")
+        await #expect(throws: Error.self) {
+            _ = try await manager.resolveDestination("platform=iOS Simulator,name=iPhone 15")
         }
     }
     
     @Test("Device resolution handles missing platform")
-    func missingPlatform() {
+    func missingPlatform() async {
         let manager = DeviceManager()
         
-        #expect(throws: XCSentinelError.self) {
-            _ = try manager.resolveDestination("name=SomeDevice")
+        await #expect(throws: XCSentinelError.self) {
+            _ = try await manager.resolveDestination("name=SomeDevice")
         }
     }
     
     @Test("Install app validates simulator vs device")
-    func installAppValidation() throws {
+    func installAppValidation() async throws {
         let manager = DeviceManager()
         
         // These will fail without real devices/simulators, but demonstrate the API
-        #expect(throws: Error.self) {
-            try manager.installApp(udid: "FAKE-UDID", appPath: "/fake/path.app")
+        await #expect(throws: Error.self) {
+            try await manager.installApp(udid: "FAKE-UDID", appPath: "/fake/path.app")
         }
     }
     
     @Test("Launch app validates simulator vs device")
-    func launchAppValidation() throws {
+    func launchAppValidation() async throws {
         let manager = DeviceManager()
         
         // These will fail without real devices/simulators, but demonstrate the API
-        #expect(throws: Error.self) {
-            try manager.launchApp(udid: "FAKE-UDID", bundleID: "com.fake.app")
+        await #expect(throws: Error.self) {
+            try await manager.launchApp(udid: "FAKE-UDID", bundleID: "com.fake.app")
         }
     }
 }

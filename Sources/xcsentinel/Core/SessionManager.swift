@@ -1,6 +1,6 @@
 import Foundation
 
-class SessionManager {
+actor SessionManager {
     private let stateController = StateController.shared
     private let fileManager = FileManager.default
     
@@ -9,39 +9,37 @@ class SessionManager {
         return homeDirectory.appendingPathComponent(".xcsentinel/logs")
     }
     
-    func startLogSession(udid: String, bundleID: String) throws -> String {
+    func startLogSession(udid: String, bundleID: String) async throws -> (sessionName: String, pid: Int32) {
         // Ensure log directory exists
         try fileManager.createDirectory(at: logDirectory, withIntermediateDirectories: true)
         
         // Generate session name
-        var sessionName = ""
-        try stateController.updateState { state in
+        let sessionName = try await stateController.updateState { state in
             state.globalSessionCounter += 1
-            sessionName = "session-\(state.globalSessionCounter)"
+            return "session-\(state.globalSessionCounter)"
         }
         
         // Create log file path
         let logPath = logDirectory.appendingPathComponent("\(sessionName).log").path
         
         // Determine if this is a simulator or device
-        let isSimulator = try isSimulatorUDID(udid)
+        let isSimulator = try await isSimulatorUDID(udid)
         
         // Start appropriate log process
         let process: Process
         
         if isSimulator {
-            // Per spec: using simctl log stream with predicate
-            // Note: This will stream from the currently booted simulator, not a specific UDID
-            process = try ProcessExecutor.executeAsync(
+            // Per spec: using simctl spawn to target specific simulator UDID
+            process = try await ProcessExecutor.executeAsync(
                 "/usr/bin/xcrun",
                 arguments: [
-                    "simctl", "log", "stream",
+                    "simctl", "spawn", udid, "log", "stream",
                     "--predicate", "subsystem == \"\(bundleID)\""
                 ],
                 outputPath: logPath
             )
         } else {
-            process = try ProcessExecutor.executeAsync(
+            process = try await ProcessExecutor.executeAsync(
                 "/usr/bin/xcrun",
                 arguments: [
                     "devicectl", "device", "console",
@@ -62,18 +60,18 @@ class SessionManager {
             startTime: Date()
         )
         
-        try stateController.updateState { state in
+        _ = try await stateController.updateState { state in
             state.logSessions[sessionName] = session
         }
         
-        return sessionName
+        return (sessionName, process.processIdentifier)
     }
     
-    func stopLogSession(sessionName: String, fullOutput: Bool) throws -> String {
-        let session = try getSession(sessionName)
+    func stopLogSession(sessionName: String, fullOutput: Bool) async throws -> String {
+        let session = try await getSession(sessionName)
         
         // Terminate the process
-        let killResult = try ProcessExecutor.execute(
+        let killResult = try await ProcessExecutor.execute(
             "/bin/kill",
             arguments: ["-TERM", "\(session.pid)"]
         )
@@ -84,13 +82,13 @@ class SessionManager {
         }
         
         // Wait a moment for the process to finish writing
-        Thread.sleep(forTimeInterval: 0.5)
+        try await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
         
         // Read log content
         let logContent = try String(contentsOfFile: session.logPath, encoding: .utf8)
         
         // Remove session from state
-        try stateController.updateState { state in
+        _ = try await stateController.updateState { state in
             state.logSessions.removeValue(forKey: sessionName)
         }
         
@@ -105,42 +103,49 @@ class SessionManager {
         }
     }
     
-    func tailLogSession(sessionName: String) throws {
-        let session = try getSession(sessionName)
+    func tailLogSession(sessionName: String) async throws {
+        let session = try await getSession(sessionName)
         
         // Use tail -f to follow the log file
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/tail")
         process.arguments = ["-f", session.logPath]
         
-        try process.run()
-        process.waitUntilExit()
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            do {
+                try process.run()
+                process.waitUntilExit()
+                continuation.resume()
+            } catch {
+                continuation.resume(throwing: error)
+            }
+        }
     }
     
-    func listSessions() throws -> [LogSession] {
+    func listSessions() async throws -> [LogSession] {
         // Clean stale sessions first
-        try stateController.cleanStaleSessions()
+        try await stateController.cleanStaleSessions()
         
         // Return active sessions
-        let state = try stateController.loadState()
+        let state = try await stateController.loadState()
         return Array(state.logSessions.values).sorted { $0.startTime < $1.startTime }
     }
     
-    func cleanStaleSessions() throws {
-        try stateController.cleanStaleSessions()
+    func cleanStaleSessions() async throws {
+        try await stateController.cleanStaleSessions()
     }
     
-    private func getSession(_ name: String) throws -> LogSession {
-        let state = try stateController.loadState()
+    private func getSession(_ name: String) async throws -> LogSession {
+        let state = try await stateController.loadState()
         guard let session = state.logSessions[name] else {
             throw XCSentinelError.sessionNotFound(name)
         }
         return session
     }
     
-    private func isSimulatorUDID(_ udid: String) throws -> Bool {
+    private func isSimulatorUDID(_ udid: String) async throws -> Bool {
         // Check if this UDID exists in simulator list
-        let result = try ProcessExecutor.execute(
+        let result = try await ProcessExecutor.execute(
             "/usr/bin/xcrun",
             arguments: ["simctl", "list", "devices", "-j"]
         )
